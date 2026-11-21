@@ -8,6 +8,8 @@ A macOS menu bar item and desktop widget that show your Claude plan limits: the 
 | --- | --- |
 | ![Popover](docs/popover.png) | ![Widget](docs/widget.png) |
 
+**On Linux?** There's a KDE Plasma 6 widget version in [`kde/`](kde/README.md): `make kde-install`.
+
 ## Install
 
 Requires macOS 14+, the Xcode Command Line Tools (`xcode-select --install`), and a Claude Code login (`claude`, then `/login`).

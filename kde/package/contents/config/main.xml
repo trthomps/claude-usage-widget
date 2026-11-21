@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- pills | stacked | focus | text -->
+    <entry name="style" type="String"><default>pills</default></entry>
+    <!-- Comma-separated limit ids. "weekly:*" means every per-model weekly limit. -->
+    <entry name="metrics" type="String"><default>session,weekly_all</default></entry>
+    <entry name="showLabels" type="Bool"><default>false</default></entry>
+    <entry name="showPace" type="Bool"><default>true</default></entry>
+    <!-- warnings | claude | monochrome -->
+    <entry name="colorMode" type="String"><default>warnings</default></entry>
+    <!-- Seconds between fetches (minimum 30) -->
+    <entry name="refreshInterval" type="Int"><default>120</default></entry>
+  </group>
+  <group name="Cache">
+    <!-- Last good snapshot (percentages and reset times only; never the token) -->
+    <entry name="cachedSnapshot" type="String"><default></default></entry>
+    <!-- Plan label from /api/oauth/profile, e.g. "Max · 20x" -->
+    <entry name="cachedPlan" type="String"><default></default></entry>
+  </group>
+</kcfg>

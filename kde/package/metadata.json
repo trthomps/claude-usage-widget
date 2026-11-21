@@ -1,0 +1,18 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Travis Thompson"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Your Claude plan limits: the 5-hour session, the weekly cap and per-model weekly caps",
+        "Icon": "office-chart-bar-percentage",
+        "Id": "dev.claudeusage.plasmoid",
+        "License": "MIT",
+        "Name": "Claude Usage",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

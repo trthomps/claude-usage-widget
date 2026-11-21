@@ -1,7 +1,7 @@
 APP := build/Claude Usage.app
 INSTALL_DIR ?= $(HOME)/Applications
 
-.PHONY: app install run print previews clean
+.PHONY: app install run print previews clean kde-install kde-uninstall kde-test
 
 app:
 	./scripts/build-app.sh
@@ -26,3 +26,16 @@ previews:
 
 clean:
 	rm -rf .build build
+
+# KDE Plasma 6 widget (see kde/README.md)
+KDE_ID := dev.claudeusage.plasmoid
+
+kde-install:
+	kpackagetool6 -t Plasma/Applet -u kde/package 2>/dev/null || kpackagetool6 -t Plasma/Applet -i kde/package
+	@echo "Installed. Add \"Claude Usage\" from Add Widgets. After an upgrade, restart plasmashell: systemctl --user restart plasma-plasmashell"
+
+kde-uninstall:
+	kpackagetool6 -t Plasma/Applet -r $(KDE_ID)
+
+kde-test:
+	node kde/test/usage.test.js
