@@ -1,7 +1,7 @@
 .pragma library
 
 // Port of Models.swift, UsageParser.swift and Formatting.swift.
-// Plain JS so it can be unit-tested with node (see kde/test/parser.test.js).
+// Plain JS so it can be unit-tested with node (see kde/test/usage.test.js).
 
 var HOUR = 3600 * 1000;
 var DAY = 24 * HOUR;
@@ -128,8 +128,9 @@ function scopeName(any) {
 }
 
 function inferredGroup(kind) {
-    if (kind.indexOf("session") >= 0) return "session";
-    if (kind.indexOf("week") >= 0) return "weekly";
+    var k = kind.toLowerCase();
+    if (k.indexOf("session") >= 0 || k.indexOf("five_hour") === 0) return "session";
+    if (k.indexOf("week") >= 0 || k.indexOf("seven_day") === 0) return "weekly";
     return "";
 }
 
@@ -244,7 +245,10 @@ function parseCredential(text) {
     return {
         accessToken: oauth.accessToken,
         expiresAt: exp === null ? null : (exp > 1e12 ? exp : exp * 1000),
-        plan: planDescription(oauth.subscriptionType, oauth.rateLimitTier)
+        plan: planDescription(oauth.subscriptionType, oauth.rateLimitTier),
+        // Identifies the login (these fields are only rewritten when you sign in again), so a
+        // plan name cached for one account is never shown for another.
+        login: String(oauth.subscriptionType || "") + "|" + String(oauth.rateLimitTier || "")
     };
 }
 

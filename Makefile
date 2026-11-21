@@ -31,7 +31,11 @@ clean:
 KDE_ID := dev.claudeusage.plasmoid
 
 kde-install:
-	kpackagetool6 -t Plasma/Applet -u kde/package 2>/dev/null || kpackagetool6 -t Plasma/Applet -i kde/package
+	if kpackagetool6 -t Plasma/Applet -s $(KDE_ID) >/dev/null 2>&1; then \
+		kpackagetool6 -t Plasma/Applet -u kde/package; \
+	else \
+		kpackagetool6 -t Plasma/Applet -i kde/package; \
+	fi
 	@echo "Installed. Add \"Claude Usage\" from Add Widgets. After an upgrade, restart plasmashell: systemctl --user restart plasma-plasmashell"
 
 kde-uninstall:

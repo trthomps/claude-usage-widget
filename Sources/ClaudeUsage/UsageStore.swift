@@ -20,14 +20,24 @@ final class UsageStore: ObservableObject {
     private var clockTimer: Timer?
     private var pollInterval: TimeInterval = 0
     private var backoffUntil: Date?
-    private var profileFetchedAt: Date?
+    /// The plan name from the profile endpoint, tagged with the login it was fetched under.
+    private struct CachedPlan: Codable {
+        var plan: String
+        var login: String
+    }
+    private var cachedPlan: CachedPlan?
+    private var profileToken: String?
+    private var profileNextAt = Date.distantPast
+    private var profileTask: Task<Void, Never>?
     private static let profilePlanKey = "profilePlan"
     private var wakeObserver: NSObjectProtocol?
 
     init() {
         isPreview = false
         snapshot = Self.loadCache()
-        plan = UserDefaults.standard.string(forKey: Self.profilePlanKey)
+        cachedPlan = UserDefaults.standard.data(forKey: Self.profilePlanKey)
+            .flatMap { try? JSONDecoder().decode(CachedPlan.self, from: $0) }
+        plan = cachedPlan?.plan
     }
 
     /// A frozen store for previews and screenshots. Never touches the network.
@@ -124,7 +134,7 @@ final class UsageStore: ObservableObject {
             error = nil
             backoffUntil = nil
             saveCache(fresh)
-            await refreshPlanIfNeeded()
+            refreshPlanIfNeeded()
         } catch let failure as UsageError {
             Debug.log("fetch failed: \(failure)")
             error = failure
@@ -148,14 +158,37 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    /// The plan rarely changes, so ask the profile endpoint at most hourly.
-    private func refreshPlanIfNeeded() async {
-        if let profileFetchedAt, Date().timeIntervalSince(profileFetchedAt) < 3600 { return }
-        guard let token = credential?.accessToken else { return }
-        profileFetchedAt = Date()
-        guard let fresh = await api.fetchPlan(token: token) else { return }
-        plan = fresh
-        UserDefaults.standard.set(fresh, forKey: Self.profilePlanKey)
+    /// The plan rarely changes, so ask the profile endpoint hourly, or right away when the token
+    /// changes. A failure retries in 5 minutes. Runs on its own so it never holds up a refresh.
+    private func refreshPlanIfNeeded() {
+        guard profileTask == nil, let credential else { return }
+        if credential.accessToken == profileToken, Date() < profileNextAt { return }
+        let api = self.api
+        let token = credential.accessToken
+        let login = credential.loginID
+        profileTask = Task { [weak self] in
+            let fresh = await api.fetchPlan(token: token)
+            guard let self else { return }
+            self.profileTask = nil
+            self.profileToken = token
+            self.profileNextAt = Date().addingTimeInterval(fresh == nil ? 5 * 60 : 3600)
+            if let fresh {
+                let entry = CachedPlan(plan: fresh, login: login)
+                self.cachedPlan = entry
+                UserDefaults.standard.set(try? JSONEncoder().encode(entry), forKey: Self.profilePlanKey)
+            }
+            self.updatePlan()
+        }
+    }
+
+    /// The profile's plan name if it was fetched under the current login, otherwise the
+    /// (possibly stale) one saved with the login. Switching accounts never shows the old plan.
+    private func updatePlan() {
+        if let cachedPlan, credential == nil || cachedPlan.login == credential?.loginID {
+            plan = cachedPlan.plan
+        } else {
+            plan = credential?.planDescription
+        }
     }
 
     private func loadCredential(forceReload: Bool) async throws -> OAuthCredential {
@@ -166,9 +199,7 @@ final class UsageStore: ObservableObject {
         }.value
 
         credential = loaded
-        if UserDefaults.standard.string(forKey: Self.profilePlanKey) == nil {
-            plan = loaded.planDescription
-        }
+        updatePlan()
         credentialSource = loaded.source
         tokenExpiresAt = loaded.expiresAt
         if loaded.isExpired { throw UsageError.credentialsExpired }

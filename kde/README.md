@@ -21,7 +21,7 @@ After upgrading an installed copy, restart Plasma so it reloads the QML: `system
 ## How it differs from the macOS version
 
 - **Login**: reads `~/.claude/.credentials.json` (or `$CLAUDE_CONFIG_DIR/.credentials.json`), which is where Claude Code keeps its login on Linux. The file is read with `cat` through Plasma's executable data engine, since QML can't read local files directly. The token stays in memory; it's never written anywhere and never refreshed.
-- **Cache**: the last good snapshot (percentages and reset times only) is stored in the widget's own config entry, in `~/.config/plasma-org.kde.plasma.desktop-appletsrc`.
+- **Cache**: the last good snapshot (percentages and reset times only) and the plan name are kept in `~/.cache/plasmashell/claude-usage-widget.conf`, not in Plasma's layout config, so polling doesn't rewrite `appletsrc`. The file is only written when the numbers change (or every 10 minutes).
 - **Colors** follow the Plasma theme: *Warnings* uses the theme's neutral (orange) and negative (red) colors.
 - **Resume from suspend** is detected from a gap between clock ticks and triggers a refresh 5 seconds later.
 

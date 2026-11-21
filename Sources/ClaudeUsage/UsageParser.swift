@@ -73,8 +73,9 @@ enum UsageParser {
     }
 
     private static func inferredGroup(_ kind: String) -> String {
-        if kind.contains("session") { return "session" }
-        if kind.contains("week") { return "weekly" }
+        let k = kind.lowercased()
+        if k.contains("session") || k.hasPrefix("five_hour") { return "session" }
+        if k.contains("week") || k.hasPrefix("seven_day") { return "weekly" }
         return ""
     }
 

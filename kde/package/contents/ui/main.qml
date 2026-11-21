@@ -4,6 +4,7 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasma5support as P5Support
 import org.kde.kirigami as Kirigami
+import QtCore
 
 import "../code/usage.js" as U
 
@@ -15,8 +16,17 @@ PlasmoidItem {
     property var snapshot: null          // { limits, extra, fetchedAt }
     property var error: null             // U.errorInfo(...)
     property string credentialPlan: ""
-    readonly property string plan: Plasmoid.configuration.cachedPlan || credentialPlan
-    property real profileFetchedAt: 0
+    // The profile's plan name is trusted only for the login it was fetched under, so switching
+    // accounts never shows the previous account's plan.
+    readonly property var planCache: {
+        try { return cache.plan ? JSON.parse(cache.plan) : null } catch (e) { return null }
+    }
+    readonly property string plan: planCache && planCache.plan
+        && (!credential || planCache.login === credential.login) ? planCache.plan : credentialPlan
+    property string profileToken: ""      // token the cached plan was last confirmed with
+    property real profileNextAt: 0        // earliest time for the next profile request
+    property bool profileBusy: false
+    property real cacheWrittenAt: 0
     property bool refreshing: false
     property real now: Date.now()
     property var credential: null
@@ -100,7 +110,19 @@ PlasmoidItem {
     ]
 
     onExpandedChanged: {
-        if (expanded && (!snapshot || Date.now() - snapshot.fetchedAt > 45000)) refresh(false)
+        if (root.expanded && (!snapshot || Date.now() - snapshot.fetchedAt > 45000)) refresh(false)
+    }
+
+    // MARK: - Cache (~/.cache/plasmashell/claude-usage-widget.conf)
+
+    // Kept out of Plasma's layout config so polling doesn't rewrite appletsrc. Holds the last
+    // good snapshot (percentages and reset times) and the plan name; never the token.
+    Settings {
+        id: cache
+        location: StandardPaths.writableLocation(StandardPaths.CacheLocation) + "/claude-usage-widget.conf"
+        category: "Cache"
+        property string snapshot: ""
+        property string plan: ""
     }
 
     // MARK: - Credentials (~/.claude/.credentials.json, read-only)
@@ -112,18 +134,35 @@ PlasmoidItem {
         property var callbacks: ({})
         property int serial: 0
 
-        onNewData: (source, data) => {
-            const cb = callbacks[source]
+        onNewData: (source, data) => finish(source, data["exit code"], data["stdout"] || "")
+
+        function finish(source, code, stdout) {
+            const pending = callbacks[source]
             delete callbacks[source]
             disconnectSource(source)
-            if (cb) cb(data["exit code"], data["stdout"] || "")
+            if (Object.keys(callbacks).length === 0) shellWatchdog.stop()
+            if (pending) pending.cb(code, stdout)
         }
 
         function run(command, cb) {
             // A unique trailing comment lets the same command run again while an old one lingers.
             const source = command + " # " + (++serial)
-            callbacks[source] = cb
+            callbacks[source] = { cb: cb, at: Date.now() }
+            shellWatchdog.start()
             connectSource(source)
+        }
+    }
+
+    Timer {
+        // If the executable engine never answers, fail the read instead of wedging `refreshing`.
+        id: shellWatchdog
+        interval: 2000
+        repeat: true
+        onTriggered: {
+            const cutoff = Date.now() - 10000
+            Object.keys(shell.callbacks).forEach(source => {
+                if (shell.callbacks[source].at < cutoff) shell.finish(source, -1, "")
+            })
         }
     }
 
@@ -175,8 +214,8 @@ PlasmoidItem {
         xhr.setRequestHeader("Authorization", "Bearer " + token)
         xhr.setRequestHeader("anthropic-beta", "oauth-2025-04-20")
         xhr.setRequestHeader("Accept", "application/json")
-        xhr.setRequestHeader("User-Agent", "claude-usage-widget/kde")
-        abortTimer.onAbort = () => { xhr.abort(); finish(U.usageError("network", "timed out"), null) }
+        // Report the timeout before abort(): abort() fires readystatechange with status 0.
+        abortTimer.onAbort = () => { finish(U.usageError("network", "timed out"), null); xhr.abort() }
         abortTimer.restart()
         xhr.send()
     }
@@ -188,22 +227,43 @@ PlasmoidItem {
         onTriggered: if (onAbort) onAbort()
     }
 
-    /// The plan rarely changes, so ask the profile endpoint at most hourly. Failures are ignored.
-    function fetchProfile(token) {
-        if (Date.now() - profileFetchedAt < 3600 * 1000) return
-        profileFetchedAt = Date.now()
+    /// The plan rarely changes, so ask the profile endpoint hourly, or right away when the login
+    /// changes. A failure retries in 5 minutes. It's cosmetic, so errors never surface.
+    function fetchProfile(cred) {
+        if (profileBusy || (cred.accessToken === profileToken && Date.now() < profileNextAt)) return
+        profileBusy = true
         const xhr = new XMLHttpRequest()
+        let done = false
+        const finish = planName => {
+            if (done) return
+            done = true
+            profileTimeout.stop()
+            profileBusy = false
+            profileToken = cred.accessToken
+            profileNextAt = Date.now() + (planName ? 3600 : 5 * 60) * 1000
+            if (planName) {
+                const entry = JSON.stringify({ plan: planName, login: cred.login })
+                if (entry !== cache.plan) cache.plan = entry
+            }
+        }
         xhr.onreadystatechange = () => {
-            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200) return
-            const p = U.parseProfilePlan(xhr.responseText)
-            if (p && p !== Plasmoid.configuration.cachedPlan) Plasmoid.configuration.cachedPlan = p
+            if (xhr.readyState !== XMLHttpRequest.DONE) return
+            finish(xhr.status === 200 ? U.parseProfilePlan(xhr.responseText) : null)
         }
         xhr.open("GET", "https://api.anthropic.com/api/oauth/profile")
-        xhr.setRequestHeader("Authorization", "Bearer " + token)
+        xhr.setRequestHeader("Authorization", "Bearer " + cred.accessToken)
         xhr.setRequestHeader("anthropic-beta", "oauth-2025-04-20")
         xhr.setRequestHeader("Accept", "application/json")
-        xhr.setRequestHeader("User-Agent", "claude-usage-widget/kde")
+        profileTimeout.onAbort = () => { finish(null); xhr.abort() }
+        profileTimeout.restart()
         xhr.send()
+    }
+
+    Timer {
+        id: profileTimeout
+        interval: 15000
+        property var onAbort: null
+        onTriggered: if (onAbort) onAbort()
     }
 
     function refresh(userInitiated) {
@@ -218,13 +278,20 @@ PlasmoidItem {
             now = Date.now()
         }
         const succeed = fresh => {
-            if (credential) fetchProfile(credential.accessToken)
+            // Only touch the cache file when the numbers change, or to keep fetchedAt
+            // roughly current for the stale check after a restart.
+            const changed = !snapshot
+                || JSON.stringify([snapshot.limits, snapshot.extra]) !== JSON.stringify([fresh.limits, fresh.extra])
+            if (changed || fresh.fetchedAt - cacheWrittenAt > 10 * 60 * 1000) {
+                cache.snapshot = JSON.stringify(fresh)
+                cacheWrittenAt = fresh.fetchedAt
+            }
             snapshot = fresh
             error = null
             backoffUntil = 0
-            Plasmoid.configuration.cachedSnapshot = JSON.stringify(fresh)
             refreshing = false
             now = Date.now()
+            if (credential) fetchProfile(credential)
         }
 
         loadCredential(false, (err, cred) => {
@@ -274,11 +341,11 @@ PlasmoidItem {
     }
 
     Component.onCompleted: {
-        const cached = Plasmoid.configuration.cachedSnapshot
+        const cached = cache.snapshot
         if (cached) {
             try {
                 const s = JSON.parse(cached)
-                if (s && Array.isArray(s.limits)) snapshot = s
+                if (s && Array.isArray(s.limits)) { snapshot = s; cacheWrittenAt = s.fetchedAt || 0 }
             } catch (e) {}
         }
         refresh(false)

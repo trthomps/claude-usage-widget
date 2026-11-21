@@ -24,9 +24,12 @@ MouseArea {
 
     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
     hoverEnabled: true
+    // The popup closes itself on press (it loses focus), so decide from the state before the press.
+    property bool wasExpanded: false
+    onPressed: wasExpanded = root.expanded
     onClicked: mouse => {
         if (mouse.button === Qt.MiddleButton) root.refresh(true)
-        else root.expanded = !root.expanded
+        else root.expanded = !wasExpanded
     }
 
     Item {
@@ -97,6 +100,20 @@ MouseArea {
         // Two mini bars on top of each other with the numbers to the right. The narrowest style.
         RowLayout {
             spacing: 4
+            ColumnLayout {
+                visible: compact.showLabels
+                spacing: -2
+                Repeater {
+                    model: compact.shown.slice(0, 2)
+                    Text {
+                        text: modelData.shortLabel
+                        color: Kirigami.Theme.textColor
+                        opacity: 0.8
+                        font.pixelSize: Math.round(Kirigami.Units.gridUnit * 0.55)
+                        font.weight: Font.Medium
+                    }
+                }
+            }
             ColumnLayout {
                 spacing: 3
                 Repeater {

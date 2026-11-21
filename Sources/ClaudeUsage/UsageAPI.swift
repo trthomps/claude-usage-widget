@@ -81,7 +81,9 @@ struct UsageAPI {
 
     /// The account's current plan name, or nil on any failure (it's cosmetic).
     func fetchPlan(token: String) async -> String? {
-        guard let result = try? await session.data(for: Self.request(Self.profileEndpoint, token: token)),
+        var request = Self.request(Self.profileEndpoint, token: token)
+        request.timeoutInterval = 10
+        guard let result = try? await session.data(for: request),
               (result.1 as? HTTPURLResponse)?.statusCode == 200
         else { return nil }
         return PlanName.fromProfile(result.0)

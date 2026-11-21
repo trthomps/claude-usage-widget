@@ -45,6 +45,16 @@ test("legacy flat keys", () => {
     eq(s.extra, { used: 5, limit: 100, currency: "EUR", enabled: true });
 });
 
+test("group inferred from legacy-style kinds", () => {
+    const s = U.parseUsage(JSON.stringify({ limits: [
+        { kind: "seven_day_opus", percent: 40, resets_at: "2026-11-20T12:00:00Z" },
+        { kind: "five_hour", percent: 10 },
+    ] }), now);
+    eq(s.limits.map(l => l.group), ["weekly", "session"]);
+    // A passed weekly reset rolls to the next one instead of "Not started".
+    assert.strictEqual(U.effective(s.limits[0], now).resetsAt, Date.parse("2026-11-27T12:00:00Z"));
+});
+
 test("errors", () => {
     assert.throws(() => U.parseUsage("nope"), e => e.kind === "decoding");
     assert.throws(() => U.parseUsage("{}"), e => e.kind === "decoding");
@@ -54,7 +64,7 @@ test("errors", () => {
 test("credentials", () => {
     const c = U.parseCredential(JSON.stringify({ claudeAiOauth: {
         accessToken: "tok", expiresAt: 1795000000000, subscriptionType: "max", rateLimitTier: "default_claude_max_5x" } }));
-    eq(c, { accessToken: "tok", expiresAt: 1795000000000, plan: "Max · 5x" });
+    eq(c, { accessToken: "tok", expiresAt: 1795000000000, plan: "Max · 5x", login: "max|default_claude_max_5x" });
     assert.strictEqual(U.parseCredential("{}"), null);
     assert.strictEqual(U.planDescription("team", null), "Team");
 });

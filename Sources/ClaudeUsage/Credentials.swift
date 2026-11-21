@@ -15,6 +15,10 @@ struct OAuthCredential {
     /// "Max · 20x", "Team · 5x", "Pro". Only a fallback: Claude Code writes these fields at
     /// login and never updates them, so they go stale after a plan change. See `PlanName.fromProfile`.
     var planDescription: String? { PlanName.describe(type: subscriptionType, tier: rateLimitTier) }
+
+    /// Identifies the login. These fields are only rewritten when you sign in again, so a plan
+    /// name cached for one account is never shown for another.
+    var loginID: String { "\(subscriptionType ?? "")|\(rateLimitTier ?? "")" }
 }
 
 enum PlanName {

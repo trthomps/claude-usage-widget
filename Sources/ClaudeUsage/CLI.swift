@@ -17,8 +17,10 @@ enum CLI {
                 let credential = try CredentialStore.load()
                 if credential.isExpired { throw UsageError.credentialsExpired }
                 let api = UsageAPI()
+                // Both at once, so the cosmetic plan lookup adds no wait (it times out after 10s).
+                async let profilePlan = api.fetchPlan(token: credential.accessToken)
                 let snapshot = try await api.fetch(token: credential.accessToken)
-                let plan = await api.fetchPlan(token: credential.accessToken) ?? credential.planDescription
+                let plan = await profilePlan ?? credential.planDescription
                 box.value = .success((snapshot, plan))
             } catch {
                 box.value = .failure(error)

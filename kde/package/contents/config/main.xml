@@ -15,10 +15,4 @@
     <!-- Seconds between fetches (minimum 30) -->
     <entry name="refreshInterval" type="Int"><default>120</default></entry>
   </group>
-  <group name="Cache">
-    <!-- Last good snapshot (percentages and reset times only; never the token) -->
-    <entry name="cachedSnapshot" type="String"><default></default></entry>
-    <!-- Plan label from /api/oauth/profile, e.g. "Max · 20x" -->
-    <entry name="cachedPlan" type="String"><default></default></entry>
-  </group>
 </kcfg>
