@@ -6,6 +6,10 @@ A Plasma 6 widget (plasmoid) port of the macOS app: the same limits, pace marker
 - **On the desktop**: a ring per limit, like the macOS desktop widget.
 - **Tooltip**: every limit with its reset time.
 
+| Panel styles | Popup | On the desktop |
+| --- | --- | --- |
+| ![Panel styles](../docs/kde-panel.png) | ![Popup](../docs/kde-popup.png) | ![Desktop](../docs/kde-desktop.png) |
+
 ## Install
 
 Requires Plasma 6 and a Claude Code login on this machine (`claude`, then `/login`).
@@ -18,9 +22,17 @@ Then right-click a panel or the desktop → **Add Widgets…** → **Claude Usag
 
 After upgrading an installed copy, restart Plasma so it reloads the QML: `systemctl --user restart plasma-plasmashell`. To try it in a window without touching your panel: `plasmawindowed dev.claudeusage.plasmoid`.
 
-## How it differs from the macOS version
+To remove it, take it off your panels and desktop, then run:
+
+```sh
+make kde-uninstall  # or: kpackagetool6 -t Plasma/Applet -r dev.claudeusage.plasmoid
+rm -f ~/.cache/plasmashell/claude-usage-widget.conf   # optional: the cached numbers and plan name
+```
+
+## How it works
 
 - **Login**: reads `~/.claude/.credentials.json` (or `$CLAUDE_CONFIG_DIR/.credentials.json`), which is where Claude Code keeps its login on Linux. The file is read with `cat` through Plasma's executable data engine, since QML can't read local files directly. The token stays in memory; it's never written anywhere and never refreshed.
+- **Plan name**: the label next to the title ("Ultra", "Pro") comes from `GET /api/oauth/profile`, the same as on macOS. It's fetched hourly, and right away when the login changes. The plan saved in the credentials file is only a fallback, because Claude Code writes it at login and never updates it, so it goes stale after a plan change. A cached plan name is shown only for the login it was fetched under.
 - **Cache**: the last good snapshot (percentages and reset times only) and the plan name are kept in `~/.cache/plasmashell/claude-usage-widget.conf`, not in Plasma's layout config, so polling doesn't rewrite `appletsrc`. The file is only written when the numbers change (or every 10 minutes).
 - **Colors** follow the Plasma theme: *Warnings* uses the theme's neutral (orange) and negative (red) colors.
 - **Resume from suspend** is detected from a gap between clock ticks and triggers a refresh 5 seconds later.

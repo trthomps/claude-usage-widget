@@ -1,6 +1,9 @@
 # Claude Usage
 
-A macOS menu bar item and desktop widget that show your Claude plan limits: the 5-hour session, the weekly cap, and any per-model weekly caps. These are the same numbers `/usage` shows in Claude Code.
+Shows your Claude plan limits: the 5-hour session, the weekly cap, and any per-model weekly caps. These are the same numbers `/usage` shows in Claude Code. It comes in two versions with the same features and design:
+
+- **macOS**: a menu bar item and a desktop widget (Swift, in `Sources/`).
+- **KDE Plasma 6 on Linux**: a panel widget that also works on the desktop (QML, in [`kde/`](kde/README.md)). See [KDE Plasma](#kde-plasma).
 
 ![Menu bar styles, dark](docs/menubar-dark.png)
 
@@ -8,9 +11,9 @@ A macOS menu bar item and desktop widget that show your Claude plan limits: the 
 | --- | --- |
 | ![Popover](docs/popover.png) | ![Widget](docs/widget.png) |
 
-**On Linux?** There's a KDE Plasma 6 widget version in [`kde/`](kde/README.md): `make kde-install`.
-
 ## Install
+
+### macOS
 
 Requires macOS 14+, the Xcode Command Line Tools (`xcode-select --install`), and a Claude Code login (`claude`, then `/login`).
 
@@ -22,7 +25,17 @@ To build without installing, run `make app`. The app ends up in `build/`.
 
 Don't see it in the menu bar? Menu bar managers such as Hidden Bar, Ice and Bartender put new items in their hidden section. Expand that section and ⌘-drag the item into the visible part. Opening the app again (Spotlight, Finder) always brings up Settings.
 
-## Using it
+### KDE Plasma (Linux)
+
+Requires Plasma 6 and a Claude Code login (`claude`, then `/login`).
+
+```sh
+make kde-install  # installs the widget for your user with kpackagetool6
+```
+
+Then right-click a panel or the desktop → **Add Widgets…** → **Claude Usage**. More in [KDE Plasma](#kde-plasma) below.
+
+## Using it on macOS
 
 - **Click** the menu bar item for the detail popover: each limit, its reset time, a pace marker, and a forecast ("Limit in ~1h 12m" or "~62% at reset").
 - **Right-click** for Refresh, the desktop widget toggle, Settings and Quit.
@@ -66,11 +79,28 @@ Light menu bar:
 
 ![Menu bar styles, light](docs/menubar-light.png)
 
+## KDE Plasma
+
+The Plasma widget is a port of the macOS app: the same limits, pace marker, forecast, colors and settings, drawn with Plasma's own theme.
+
+| Panel styles | Popup | On the desktop |
+| --- | --- | --- |
+| ![Panel styles](docs/kde-panel.png) | ![Popup](docs/kde-popup.png) | ![Desktop](docs/kde-desktop.png) |
+
+- **In a panel**: the four menu bar styles (Pills, Stacked, Focus, Text). It works in horizontal and vertical panels. **Click** for the detail popup, **middle-click** to refresh, **right-click** for Refresh Now, Open Usage Page and Configure.
+- **On the desktop**: one ring per limit, like the macOS desktop widget. Resize and move it like any Plasma widget.
+- **Hover** for a tooltip with every limit and its reset time.
+- **Settings** (right-click → Configure): style, which limits appear in the panel, labels, pace marker, color mode and refresh interval.
+
+It reads Claude Code's login from `~/.claude/.credentials.json`, where Claude Code keeps it on Linux, and never writes or refreshes it. The last good numbers and the plan name are cached in `~/.cache/plasmashell/claude-usage-widget.conf`. After upgrading, restart Plasma to load the new version (`systemctl --user restart plasma-plasmashell`). `make kde-uninstall` removes it. Details are in [`kde/README.md`](kde/README.md).
+
 ## How it works
 
+The same for both versions, except where noted.
+
 - **Data**: `GET https://api.anthropic.com/api/oauth/usage`, the endpoint Claude Code's `/usage` reads. It is undocumented and may change. The plan name ("Ultra", "Pro") comes from `GET /api/oauth/profile`, at most hourly, because the tier Claude Code saves with its login goes stale after a plan change. The parser prefers the structured `limits` array, falls back to the older flat `five_hour`/`seven_day_*` keys, and ignores fields it doesn't recognize.
-- **Login**: reads Claude Code's OAuth token from the Keychain item `Claude Code-credentials` using `/usr/bin/security`. Claude Code writes that item with the same tool, so reading it doesn't trigger a Keychain prompt. It falls back to `~/.claude/.credentials.json`. The app never writes credentials and never refreshes the token itself. That would rotate Claude Code's refresh token out from under it. If the token has expired, the app keeps showing the last known numbers (faded) until Claude Code renews it, which happens the next time you use it.
-- **Polling**: every 2 minutes by default (configurable), when the popover opens, and after wake. On HTTP 429 it backs off. Only percentages and reset times are cached, in `~/Library/Application Support/ClaudeUsage/snapshot.json`. Tokens are never written to disk.
+- **Login (macOS)**: reads Claude Code's OAuth token from the Keychain item `Claude Code-credentials` using `/usr/bin/security`. Claude Code writes that item with the same tool, so reading it doesn't trigger a Keychain prompt. It falls back to `~/.claude/.credentials.json`. The app never writes credentials and never refreshes the token itself. That would rotate Claude Code's refresh token out from under it. On Linux, the KDE widget reads only `~/.claude/.credentials.json` (or `$CLAUDE_CONFIG_DIR/.credentials.json`). If the token has expired, both keep showing the last known numbers (faded) until Claude Code renews it, which happens the next time you use it.
+- **Polling**: every 2 minutes by default (configurable), when the popover opens, and after wake. On HTTP 429 it backs off. Only percentages and reset times are cached, in `~/Library/Application Support/ClaudeUsage/snapshot.json` on macOS and `~/.cache/plasmashell/claude-usage-widget.conf` on KDE. Tokens are never written to disk.
 - **Reset rollover**: when a window's reset time passes between fetches, it shows 0% right away instead of a stale number.
 
 ## Development
@@ -93,5 +123,7 @@ CLAUDE_USAGE_DEBUG=1 "build/Claude Usage.app/Contents/MacOS/ClaudeUsage"   # log
 | `SettingsView.swift` | Settings window |
 
 It's a SwiftPM executable, so you don't need Xcode. `scripts/build-app.sh` wraps the binary in an app bundle, generates the icon, and signs it ad hoc. Set `SIGN_IDENTITY` to sign with a Developer ID.
+
+The KDE widget lives in `kde/package` (a standard Plasma applet package). Its parsing and formatting logic in `kde/package/contents/code/usage.js` mirrors `Models.swift`, `UsageParser.swift` and `Formatting.swift`, so a change to one usually needs the same change in the other. `make kde-test` runs its tests under Node. [`kde/README.md`](kde/README.md) has the file map.
 
 A native WidgetKit widget, the kind in Notification Center and on the desktop since Sonoma, would need an Xcode project, a signed app extension and an App Group. The desktop panel gives you the same view without any of that.
