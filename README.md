@@ -127,3 +127,7 @@ It's a SwiftPM executable, so you don't need Xcode. `scripts/build-app.sh` wraps
 The KDE widget lives in `kde/package` (a standard Plasma applet package). Its parsing and formatting logic in `kde/package/contents/code/usage.js` mirrors `Models.swift`, `UsageParser.swift` and `Formatting.swift`, so a change to one usually needs the same change in the other. `make kde-test` runs its tests under Node. [`kde/README.md`](kde/README.md) has the file map.
 
 A native WidgetKit widget, the kind in Notification Center and on the desktop since Sonoma, would need an Xcode project, a signed app extension and an App Group. The desktop panel gives you the same view without any of that.
+
+## License
+
+[MIT](LICENSE).
