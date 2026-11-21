@@ -68,7 +68,7 @@ Light menu bar:
 
 ## How it works
 
-- **Data**: `GET https://api.anthropic.com/api/oauth/usage`, the endpoint Claude Code's `/usage` reads. It is undocumented and may change. The parser prefers the structured `limits` array, falls back to the older flat `five_hour`/`seven_day_*` keys, and ignores fields it doesn't recognize.
+- **Data**: `GET https://api.anthropic.com/api/oauth/usage`, the endpoint Claude Code's `/usage` reads. It is undocumented and may change. The plan name ("Ultra", "Pro") comes from `GET /api/oauth/profile`, at most hourly, because the tier Claude Code saves with its login goes stale after a plan change. The parser prefers the structured `limits` array, falls back to the older flat `five_hour`/`seven_day_*` keys, and ignores fields it doesn't recognize.
 - **Login**: reads Claude Code's OAuth token from the Keychain item `Claude Code-credentials` using `/usr/bin/security`. Claude Code writes that item with the same tool, so reading it doesn't trigger a Keychain prompt. It falls back to `~/.claude/.credentials.json`. The app never writes credentials and never refreshes the token itself. That would rotate Claude Code's refresh token out from under it. If the token has expired, the app keeps showing the last known numbers (faded) until Claude Code renews it, which happens the next time you use it.
 - **Polling**: every 2 minutes by default (configurable), when the popover opens, and after wake. On HTTP 429 it backs off. Only percentages and reset times are cached, in `~/Library/Application Support/ClaudeUsage/snapshot.json`. Tokens are never written to disk.
 - **Reset rollover**: when a window's reset time passes between fetches, it shows 0% right away instead of a stale number.

@@ -16,8 +16,10 @@ enum CLI {
             do {
                 let credential = try CredentialStore.load()
                 if credential.isExpired { throw UsageError.credentialsExpired }
-                let snapshot = try await UsageAPI().fetch(token: credential.accessToken)
-                box.value = .success((snapshot, credential.planDescription))
+                let api = UsageAPI()
+                let snapshot = try await api.fetch(token: credential.accessToken)
+                let plan = await api.fetchPlan(token: credential.accessToken) ?? credential.planDescription
+                box.value = .success((snapshot, plan))
             } catch {
                 box.value = .failure(error)
             }

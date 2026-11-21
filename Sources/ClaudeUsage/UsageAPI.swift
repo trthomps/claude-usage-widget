@@ -68,12 +68,27 @@ struct UsageAPI {
         return URLSession(configuration: config)
     }()
 
-    func fetch(token: String) async throws -> UsageSnapshot {
-        var request = URLRequest(url: Self.endpoint)
+    static let profileEndpoint = URL(string: "https://api.anthropic.com/api/oauth/profile")!
+
+    private static func request(_ url: URL, token: String) -> URLRequest {
+        var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("claude-usage-widget/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
+        return request
+    }
+
+    /// The account's current plan name, or nil on any failure (it's cosmetic).
+    func fetchPlan(token: String) async -> String? {
+        guard let result = try? await session.data(for: Self.request(Self.profileEndpoint, token: token)),
+              (result.1 as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return PlanName.fromProfile(result.0)
+    }
+
+    func fetch(token: String) async throws -> UsageSnapshot {
+        let request = Self.request(Self.endpoint, token: token)
 
         let data: Data, response: URLResponse
         do {

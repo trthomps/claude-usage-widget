@@ -12,16 +12,32 @@ struct OAuthCredential {
     var isExpired: Bool { expiresAt.map { $0 <= Date() } ?? false }
     var expiresSoon: Bool { expiresAt.map { $0 <= Date().addingTimeInterval(60) } ?? false }
 
-    /// "Max · 20x", "Team · 5x", "Pro".
-    var planDescription: String? {
-        guard let raw = subscriptionType?.lowercased(), !raw.isEmpty else { return nil }
+    /// "Max · 20x", "Team · 5x", "Pro". Only a fallback: Claude Code writes these fields at
+    /// login and never updates them, so they go stale after a plan change. See `PlanName.fromProfile`.
+    var planDescription: String? { PlanName.describe(type: subscriptionType, tier: rateLimitTier) }
+}
+
+enum PlanName {
+    static func describe(type: String?, tier: String?) -> String? {
+        guard var raw = type?.lowercased(), !raw.isEmpty else { return nil }
+        if raw.hasPrefix("claude_") { raw.removeFirst("claude_".count) }
         let names = ["pro": "Pro", "max": "Max", "team": "Team", "enterprise": "Enterprise", "free": "Free"]
         let base = names[raw] ?? raw.capitalized
-        if let tier = rateLimitTier,
-           let range = tier.range(of: #"\d+x"#, options: .regularExpression) {
+        if let tier, let range = tier.range(of: #"\d+x"#, options: .regularExpression) {
             return "\(base) · \(tier[range])"
         }
         return base
+    }
+
+    /// The current plan from `GET /api/oauth/profile`: the server's display name ("Ultra")
+    /// when it sends one, otherwise built from the organization type and rate-limit tier.
+    static func fromProfile(_ data: Data) -> String? {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let org = root["organization"] as? [String: Any] else { return nil }
+        if let name = (org["plan_display_name"] as? String)?.trimmingCharacters(in: .whitespaces), !name.isEmpty {
+            return name
+        }
+        return describe(type: org["organization_type"] as? String, tier: org["rate_limit_tier"] as? String)
     }
 }
 

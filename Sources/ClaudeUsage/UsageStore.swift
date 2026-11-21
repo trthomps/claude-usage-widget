@@ -20,11 +20,14 @@ final class UsageStore: ObservableObject {
     private var clockTimer: Timer?
     private var pollInterval: TimeInterval = 0
     private var backoffUntil: Date?
+    private var profileFetchedAt: Date?
+    private static let profilePlanKey = "profilePlan"
     private var wakeObserver: NSObjectProtocol?
 
     init() {
         isPreview = false
         snapshot = Self.loadCache()
+        plan = UserDefaults.standard.string(forKey: Self.profilePlanKey)
     }
 
     /// A frozen store for previews and screenshots. Never touches the network.
@@ -121,6 +124,7 @@ final class UsageStore: ObservableObject {
             error = nil
             backoffUntil = nil
             saveCache(fresh)
+            await refreshPlanIfNeeded()
         } catch let failure as UsageError {
             Debug.log("fetch failed: \(failure)")
             error = failure
@@ -144,6 +148,16 @@ final class UsageStore: ObservableObject {
         }
     }
 
+    /// The plan rarely changes, so ask the profile endpoint at most hourly.
+    private func refreshPlanIfNeeded() async {
+        if let profileFetchedAt, Date().timeIntervalSince(profileFetchedAt) < 3600 { return }
+        guard let token = credential?.accessToken else { return }
+        profileFetchedAt = Date()
+        guard let fresh = await api.fetchPlan(token: token) else { return }
+        plan = fresh
+        UserDefaults.standard.set(fresh, forKey: Self.profilePlanKey)
+    }
+
     private func loadCredential(forceReload: Bool) async throws -> OAuthCredential {
         if !forceReload, let credential, !credential.expiresSoon { return credential }
 
@@ -152,7 +166,9 @@ final class UsageStore: ObservableObject {
         }.value
 
         credential = loaded
-        plan = loaded.planDescription
+        if UserDefaults.standard.string(forKey: Self.profilePlanKey) == nil {
+            plan = loaded.planDescription
+        }
         credentialSource = loaded.source
         tokenExpiresAt = loaded.expiresAt
         if loaded.isExpired { throw UsageError.credentialsExpired }
